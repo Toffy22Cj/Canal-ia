@@ -151,44 +151,54 @@ with col_panel:
     historial_zona = BARRIOS_CARTAGENA[barrio]["historial"]
     nombre_barrio_corto = barrio.split(' (')[0]
 
-    # 2. Clima y Simulación Meteorológica
-    clima = obtener_datos_clima(coords[0], coords[1])
-    
-    st.markdown(f"""
-        <div class="weather-card">
-            <h5 style="color: #6366f1; margin: 0 0 8px 0;">🌤️ Clima en {nombre_barrio_corto}</h5>
-            <div style="font-size: 2.2rem; font-weight: 700; color: #f8fafc; margin-bottom: 5px;">{clima['temp']}°C</div>
+    # 2. Contexto Territorial y Clima (Acordeón Compacto)
+    with st.expander("📚 Contexto Territorial y Clima", expanded=False):
+        clima = obtener_datos_clima(coords[0], coords[1])
+        st.markdown(f"""
+            <div style="font-size: 1.8rem; font-weight: 700; color: #f8fafc; margin-bottom: 5px;">{clima['temp']}°C</div>
             <div style="display: flex; justify-content: space-between; font-size: 0.85rem; color: #94a3b8; margin-bottom: 8px;">
                 <span>💧 Humedad: {clima['hum']}%</span>
                 <span>💨 Viento: {clima['viento']} km/h</span>
             </div>
-        </div>
-    """, unsafe_allow_html=True)
+        """, unsafe_allow_html=True)
+        st.caption(f"**Historial {nombre_barrio_corto}:** {historial_zona}")
+        
+        datos_historicos = pd.DataFrame(
+            np.random.randint(10, 50, size=(6, 2)),
+            columns=['Inund.', 'Desliz.'],
+            index=['Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago']
+        )
+        st.bar_chart(datos_historicos, color=["#3b82f6", "#ef4444"], height=130)
 
+    # 3. Contenedor Principal (Reporte y Simulación)
+    st.markdown('<div class="result-card"><div class="result-card-header">⛈️ Simulador y Reporte Visual</div>', unsafe_allow_html=True)
+    
     default_slider_val = min(100, max(0, int(round(clima['lluvia'] / 5.0) * 5)))
-    intensidad_lluvia_mm = st.slider("Simulador Lluvia (mm/h)", 0, 100, default_slider_val, 5)
+    intensidad_lluvia_mm = st.slider("Simular Intensidad Lluvia (mm/h)", 0, 100, default_slider_val, 5)
 
     if intensidad_lluvia_mm == 0: clasif_lluvia = "☀️ Despejado"
     elif intensidad_lluvia_mm <= 20: clasif_lluvia = "🌧️ Llovizna"
     elif intensidad_lluvia_mm <= 50: clasif_lluvia = "⛈️ Lluvia Media"
     elif intensidad_lluvia_mm <= 80: clasif_lluvia = "⛈️ Lluvia Fuerte"
     else: clasif_lluvia = "🚨 Tormenta"
-
-    # 3. Reporte Ciudadano (Inteligencia Artificial)
-    st.markdown('<div class="result-card"><div class="result-card-header">📷 Visión IA & Sensores</div>', unsafe_allow_html=True)
-    uploaded_file = st.file_uploader("Subir foto del canal/calle", type=["jpg", "jpeg", "png"])
     
+    uploaded_file = st.file_uploader("Evidencia Fotográfica", type=["jpg", "jpeg", "png"])
+    
+    riesgo_pct = 0
+    nivel_obstruccion = "Ninguno"
+    justificacion = ""
+    autenticidad = "Desconocida"
+    privacidad = "Segura"
+
     if uploaded_file is not None:
         current_time = time.time()
         file_id = f"{uploaded_file.name}_{uploaded_file.size}_{barrio}"
         
         if st.session_state.ultimo_archivo != file_id:
-            # 🛡️ RATE LIMITING Y ANTI-SPAM
             if st.session_state.upload_count >= 5:
-                st.error("🚫 Límite de 5 reportes por sesión alcanzado (Filtro Anti-Spam).")
+                st.error("🚫 Límite de 5 reportes por sesión alcanzado.")
             elif current_time - st.session_state.last_upload_time < 30:
-                cooldown = 30 - int(current_time - st.session_state.last_upload_time)
-                st.warning(f"⏳ Espera {cooldown} segundos antes de enviar otro reporte.")
+                st.warning(f"⏳ Espera {30 - int(current_time - st.session_state.last_upload_time)} segs antes de enviar otro reporte.")
             else:
                 st.session_state.upload_count += 1
                 st.session_state.last_upload_time = current_time
@@ -196,8 +206,7 @@ with col_panel:
                 
                 image = Image.open(uploaded_file)
                 
-                # 🛡️ EXTRACCIÓN DE METADATOS EXIF
-                fecha_captura = "Desconocida (Sin EXIF / Posible origen WhatsApp)"
+                fecha_captura = "Desconocida (Sin EXIF / WhatsApp)"
                 exif_data = image.getexif()
                 if exif_data:
                     for tag_id in exif_data:
@@ -206,20 +215,14 @@ with col_panel:
                             fecha_captura = str(exif_data.get(tag_id))
                 st.session_state.fecha_captura = fecha_captura
                 
-                with st.spinner("Auditoría forense y análisis IA..."):
+                with st.spinner("Procesando IA Forense..."):
                     st.session_state.resultado_ia = analizar_imagen_canal(image, historial_zona)
         
-        st.image(Image.open(uploaded_file), caption="Evidencia Territorial", use_container_width=True)
+        st.image(Image.open(uploaded_file), caption="Evidencia", use_container_width=True)
     else:
         st.session_state.resultado_ia = None
         st.session_state.ultimo_archivo = None
         st.session_state.fecha_captura = "Desconocida"
-        st.info("A la espera de reporte visual para procesar.")
-
-    # 4. Cálculo de Riesgos
-    riesgo_pct = 0
-    nivel_obstruccion = "Ninguno"
-    justificacion = ""
 
     if st.session_state.resultado_ia is not None:
         res = st.session_state.resultado_ia
@@ -227,62 +230,40 @@ with col_panel:
         justificacion = res.get("justificacion", "")
         autenticidad = res.get("autenticidad", "Desconocida")
         privacidad = res.get("privacidad", "Segura")
+        st.info(f"**Diagnóstico:** {justificacion}")
         
-        st.write(f"**Análisis Estructural:** {justificacion}")
-        
-        # 🛡️ UI ESCUDO DE SEGURIDAD
-        st.divider()
-        st.caption("🛡️ **Auditoría Forense y Privacidad (Ley 1581)**")
-        
-        fecha_cap = st.session_state.get("fecha_captura", "Desconocida")
-        if "Desconocida" in fecha_cap:
-            st.warning("⚠️ **Verificación de Origen:** Sin metadatos originales EXIF.")
-        else:
-            st.success(f"✅ **Fecha Original (EXIF):** {fecha_cap}")
-            
-        if autenticidad == "Real":
-            st.success("✅ **Filtro Anti-Fake:** Imagen verificada visualmente (Real).")
-        else:
-            st.error(f"🚨 **Filtro Anti-Fake:** Imagen sospechosa de alteración ({autenticidad}).")
-            
-        if privacidad == "Datos Sensibles Detectados":
-            st.success("🛡️ **Censura Biométrica:** Rostros/Placas detectados. Se ha activado la anonimización para bases públicas.")
-        else:
-            st.info("ℹ️ **Privacidad:** No se detectaron datos biométricos sensibles.")
-        st.divider()
-
     riesgo_base_ia = riesgo_pct / 100 
     factor_lluvia = intensidad_lluvia_mm / 100
     riesgo_total_pct = int(((riesgo_base_ia * 0.6) + (factor_lluvia * 0.4)) * 100)
 
     if riesgo_total_pct >= 75:
-        color_marcador, icono_marcador, alerta_txt = "red", "warning-sign", f"🚨 ROJA: Evacuación / Desborde inminente."
+        color_marcador, icono_marcador, alerta_txt = "red", "warning-sign", f"🚨 EMERGENCIA ROJA"
         estado_ui = st.error
     elif riesgo_total_pct >= 50:
-        color_marcador, icono_marcador, alerta_txt = "orange", "info-sign", f"⚠️ NARANJA: Capacidad drenaje superada."
+        color_marcador, icono_marcador, alerta_txt = "orange", "info-sign", f"⚠️ ALERTA NARANJA"
         estado_ui = st.warning
     elif riesgo_total_pct >= 25:
-        color_marcador, icono_marcador, alerta_txt = "blue", "tint", f"ℹ️ AZUL: Monitoreo rutinario activo."
+        color_marcador, icono_marcador, alerta_txt = "blue", "tint", f"ℹ️ MONITOREO AZUL"
         estado_ui = st.info
     else:
-        color_marcador, icono_marcador, alerta_txt = "green", "ok-circle", f"🟢 SEGURA: Flujo de agua óptimo."
+        color_marcador, icono_marcador, alerta_txt = "green", "ok-circle", f"🟢 ZONA SEGURA"
         estado_ui = st.success
 
-    st.metric(label="Índice de Riesgo Agregado", value=f"{riesgo_total_pct}%", delta=f"{clasif_lluvia}")
+    st.metric(label="Riesgo Agregado", value=f"{riesgo_total_pct}%", delta=f"{clasif_lluvia}")
     estado_ui(alerta_txt)
-    st.markdown('</div>', unsafe_allow_html=True)
     
-    # 5. Estadísticas y Datos Históricos
-    st.markdown('<div class="result-card"><div class="result-card-header">📚 Historial de Vulnerabilidad</div>', unsafe_allow_html=True)
-    st.write(f"**Georreferenciación {nombre_barrio_corto}**: {historial_zona}")
-    
-    st.caption("Estadísticas de Emergencia (Último semestre)")
-    datos_historicos = pd.DataFrame(
-        np.random.randint(10, 50, size=(6, 2)),
-        columns=['Inundaciones', 'Remoción en Masa'],
-        index=['Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago']
-    )
-    st.bar_chart(datos_historicos, color=["#3b82f6", "#ef4444"], height=160)
+    if st.session_state.resultado_ia is not None:
+        with st.expander("🛡️ Auditoría Forense y Privacidad"):
+            fecha_cap = st.session_state.get("fecha_captura", "Desconocida")
+            if "Desconocida" in fecha_cap: st.warning("⚠️ Origen: Sin EXIF original.")
+            else: st.success(f"✅ EXIF: {fecha_cap}")
+                
+            if autenticidad == "Real": st.success("✅ Anti-Fake: Imagen Real.")
+            else: st.error(f"🚨 Anti-Fake: Sospechosa ({autenticidad}).")
+                
+            if privacidad == "Datos Sensibles Detectados": st.success("🛡️ Censura Biométrica Activa.")
+            else: st.info("ℹ️ Privacidad: Sin rostros/placas.")
+            
     st.markdown('</div>', unsafe_allow_html=True)
 
 
@@ -324,7 +305,7 @@ with col_mapa:
             ).add_to(mapa)
             
     # Renderizar mapa interactivo
-    map_data = st_folium(mapa, use_container_width=True, height=850)
+    map_data = st_folium(mapa, use_container_width=True, height=750)
     
     # 7. EVENTOS DE CLICK EN EL MAPA
     if map_data and map_data.get("last_object_clicked"):
