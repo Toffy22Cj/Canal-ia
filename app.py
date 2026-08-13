@@ -129,9 +129,9 @@ st.markdown('<h2 class="dashboard-header">🌊 MIDAS x AlertaMarea (Visor Territ
 st.write("")
 
 # --- INTERFAZ TIPO MIDAS (2 COLUMNAS) ---
-# Columna izquierda: Panel de Navegación y Estadísticas (1.2)
-# Columna derecha: Mapa Interactivo (2.8)
-col_panel, col_mapa = st.columns([1.2, 2.8])
+# Columna izquierda: Panel de Navegación y Estadísticas
+# Columna derecha: Mapa Interactivo
+col_panel, col_mapa = st.columns([3, 7])
 
 with col_panel:
     # 1. Buscador de Territorios
@@ -182,78 +182,90 @@ with col_panel:
     elif intensidad_lluvia_mm <= 80: clasif_lluvia = "⛈️ Lluvia Fuerte"
     else: clasif_lluvia = "🚨 Tormenta"
     
-    uploaded_file = st.file_uploader("Evidencia Fotográfica", type=["jpg", "jpeg", "png"])
-    
+    # Calcular el riesgo base IA antes de mostrar la UI
     riesgo_pct = 0
-    nivel_obstruccion = "Ninguno"
-    justificacion = ""
-    autenticidad = "Desconocida"
-    privacidad = "Segura"
-
-    if uploaded_file is not None:
-        current_time = time.time()
-        file_id = f"{uploaded_file.name}_{uploaded_file.size}_{barrio}"
-        
-        if st.session_state.ultimo_archivo != file_id:
-            if st.session_state.upload_count >= 5:
-                st.error("🚫 Límite de 5 reportes por sesión alcanzado.")
-            elif current_time - st.session_state.last_upload_time < 30:
-                st.warning(f"⏳ Espera {30 - int(current_time - st.session_state.last_upload_time)} segs antes de enviar otro reporte.")
-            else:
-                st.session_state.upload_count += 1
-                st.session_state.last_upload_time = current_time
-                st.session_state.ultimo_archivo = file_id
-                
-                image = Image.open(uploaded_file)
-                
-                fecha_captura = "Desconocida (Sin EXIF / WhatsApp)"
-                exif_data = image.getexif()
-                if exif_data:
-                    for tag_id in exif_data:
-                        tag = ExifTags.TAGS.get(tag_id, tag_id)
-                        if tag == 'DateTimeOriginal' or tag == 'DateTime':
-                            fecha_captura = str(exif_data.get(tag_id))
-                st.session_state.fecha_captura = fecha_captura
-                
-                with st.spinner("Procesando IA Forense..."):
-                    st.session_state.resultado_ia = analizar_imagen_canal(image, historial_zona)
-        
-        st.image(Image.open(uploaded_file), caption="Evidencia", use_container_width=True)
-    else:
-        st.session_state.resultado_ia = None
-        st.session_state.ultimo_archivo = None
-        st.session_state.fecha_captura = "Desconocida"
-
     if st.session_state.resultado_ia is not None:
-        res = st.session_state.resultado_ia
-        riesgo_pct = res.get("riesgo_inundacion_porcentaje", 0)
-        justificacion = res.get("justificacion", "")
-        autenticidad = res.get("autenticidad", "Desconocida")
-        privacidad = res.get("privacidad", "Segura")
-        st.info(f"**Diagnóstico:** {justificacion}")
+        riesgo_pct = st.session_state.resultado_ia.get("riesgo_inundacion_porcentaje", 0)
         
     riesgo_base_ia = riesgo_pct / 100 
     factor_lluvia = intensidad_lluvia_mm / 100
     riesgo_total_pct = int(((riesgo_base_ia * 0.6) + (factor_lluvia * 0.4)) * 100)
 
+    # UX de Métricas en primera plana (Diseño Pastel-Dark)
     if riesgo_total_pct >= 75:
-        color_marcador, icono_marcador, alerta_txt = "red", "warning-sign", f"🚨 EMERGENCIA ROJA"
-        estado_ui = st.error
+        color_borde, color_mapa = "#F38BA8", "#F38BA8" # Rojo pastel
+        texto_alerta = "🚨 ALERTA ROJA - DESBORDAMIENTO INMINENTE"
     elif riesgo_total_pct >= 50:
-        color_marcador, icono_marcador, alerta_txt = "orange", "info-sign", f"⚠️ ALERTA NARANJA"
-        estado_ui = st.warning
+        color_borde, color_mapa = "#F9E2AF", "#F9E2AF" # Naranja pastel
+        texto_alerta = "⚠️ ALERTA NARANJA - CAPACIDAD SUPERADA"
     elif riesgo_total_pct >= 25:
-        color_marcador, icono_marcador, alerta_txt = "blue", "tint", f"ℹ️ MONITOREO AZUL"
-        estado_ui = st.info
+        color_borde, color_mapa = "#89B4FA", "#89B4FA" # Azul pastel
+        texto_alerta = "ℹ️ MONITOREO ACTIVO"
     else:
-        color_marcador, icono_marcador, alerta_txt = "green", "ok-circle", f"🟢 ZONA SEGURA"
-        estado_ui = st.success
+        color_borde, color_mapa = "#A6E3A1", "#89B4FA" # Verde pastel (borde), Azul agua (mapa)
+        texto_alerta = "✅ ZONA SEGURA"
 
-    st.metric(label="Riesgo Agregado", value=f"{riesgo_total_pct}%", delta=f"{clasif_lluvia}")
-    estado_ui(alerta_txt)
+    st.markdown(f"""
+        <div style="background-color: #1E1E2E; padding: 15px; border-radius: 8px; border-left: 5px solid {color_borde}; margin-bottom: 10px; margin-top: 15px;">
+            <h3 style="color: {color_borde}; margin:0; font-size: 1.6rem;">{riesgo_total_pct}% Riesgo Agregado</h3>
+            <p style="color: #CDD6F4; margin:0; padding-top: 5px;">Intensidad lluvia: {intensidad_lluvia_mm} mm/h</p>
+        </div>
+    """, unsafe_allow_html=True)
+    st.markdown(f"<h5 style='color:{color_borde}; margin-bottom:15px;'>{texto_alerta}</h5>", unsafe_allow_html=True)
     
+    st.divider()
+    
+    # Acordeón de Evidencia Fotográfica (Oculto por defecto para ahorrar espacio)
+    with st.expander("📸 Evidencia Fotográfica y Diagnóstico IA", expanded=False):
+        uploaded_file = st.file_uploader("", type=["jpg", "jpeg", "png"])
+        
+        justificacion = ""
+        autenticidad = "Desconocida"
+        privacidad = "Segura"
+
+        if uploaded_file is not None:
+            current_time = time.time()
+            file_id = f"{uploaded_file.name}_{uploaded_file.size}_{barrio}"
+            
+            if st.session_state.ultimo_archivo != file_id:
+                if st.session_state.upload_count >= 5:
+                    st.error("🚫 Límite de 5 reportes alcanzado.")
+                elif current_time - st.session_state.last_upload_time < 30:
+                    st.warning(f"⏳ Espera {30 - int(current_time - st.session_state.last_upload_time)} segs.")
+                else:
+                    st.session_state.upload_count += 1
+                    st.session_state.last_upload_time = current_time
+                    st.session_state.ultimo_archivo = file_id
+                    
+                    image = Image.open(uploaded_file)
+                    
+                    fecha_captura = "Desconocida (Sin EXIF / WhatsApp)"
+                    exif_data = image.getexif()
+                    if exif_data:
+                        for tag_id in exif_data:
+                            tag = ExifTags.TAGS.get(tag_id, tag_id)
+                            if tag == 'DateTimeOriginal' or tag == 'DateTime':
+                                fecha_captura = str(exif_data.get(tag_id))
+                    st.session_state.fecha_captura = fecha_captura
+                    
+                    with st.spinner("Procesando IA Forense..."):
+                        st.session_state.resultado_ia = analizar_imagen_canal(image, historial_zona)
+            
+            st.image(Image.open(uploaded_file), caption="Evidencia Actual", use_container_width=True)
+        else:
+            st.session_state.resultado_ia = None
+            st.session_state.ultimo_archivo = None
+            st.session_state.fecha_captura = "Desconocida"
+
+        if st.session_state.resultado_ia is not None:
+            res = st.session_state.resultado_ia
+            justificacion = res.get("justificacion", "")
+            autenticidad = res.get("autenticidad", "Desconocida")
+            privacidad = res.get("privacidad", "Segura")
+            st.info(f"**Diagnóstico IA:** {justificacion}")
+        
     if st.session_state.resultado_ia is not None:
-        with st.expander("🛡️ Auditoría Forense y Privacidad"):
+        with st.expander("🛡️ Auditoría Forense y Privacidad", expanded=False):
             fecha_cap = st.session_state.get("fecha_captura", "Desconocida")
             if "Desconocida" in fecha_cap: st.warning("⚠️ Origen: Sin EXIF original.")
             else: st.success(f"✅ EXIF: {fecha_cap}")
@@ -269,49 +281,37 @@ with col_panel:
 
 with col_mapa:
     # 6. Mapeo GIS Interactivo
-    # Inicializar el mapa en un punto central de Cartagena
     map_center = [10.3910, -75.4794]
-    # Si el usuario hace zoom out, que vea toda Cartagena
     mapa = folium.Map(location=map_center, zoom_start=12, tiles="CartoDB dark_matter")
     
-    radio_impacto = 100 + (intensidad_lluvia_mm * 4)
-
-    # Dibujar TODOS los puntos de monitoreo
     for b_name, b_info in BARRIOS_CARTAGENA.items():
         b_coords = b_info["coords"]
+        folium.CircleMarker(
+            location=b_coords,
+            radius=5 if b_name == barrio else 3,
+            color="#FFFFFF" if b_name == barrio else "#CDD6F4",
+            fill=True,
+            fill_opacity=1,
+            tooltip=f"📍 {b_name}"
+        ).add_to(mapa)
+        
         if b_name == barrio:
-            # Marcador activo (Resaltado)
-            folium.Marker(
-                location=b_coords, 
-                popup=alerta_txt, 
-                tooltip=f"📍 {b_name} (ACTIVO)", 
-                icon=folium.Icon(color=color_marcador, icon=icono_marcador, prefix='glyphicon')
-            ).add_to(mapa)
-            # Círculo de afectación
-            folium.Circle(
-                location=b_coords, 
-                radius=radio_impacto, 
-                color=color_marcador, 
-                fill=True, 
-                fill_opacity=0.3, 
-                tooltip=f"Radio afectación: {radio_impacto}m"
-            ).add_to(mapa)
-        else:
-            # Marcadores inactivos (Listos para recibir click)
-            folium.Marker(
-                location=b_coords, 
-                tooltip=f"📌 {b_name} (Click para monitorear)", 
-                icon=folium.Icon(color="darkblue", icon="eye-open", prefix='glyphicon')
-            ).add_to(mapa)
+            if intensidad_lluvia_mm > 0 or riesgo_total_pct >= 25:
+                radio_inundacion = max(100, (intensidad_lluvia_mm * 5) + (riesgo_total_pct * 3))
+                folium.Circle(
+                    location=b_coords,
+                    radius=radio_inundacion,
+                    color=color_mapa,
+                    fill=True,
+                    fill_opacity=0.4 + (intensidad_lluvia_mm / 250),
+                    stroke=False
+                ).add_to(mapa)
             
-    # Renderizar mapa interactivo
-    map_data = st_folium(mapa, use_container_width=True, height=750)
+    map_data = st_folium(mapa, use_container_width=True, height=750, returned_objects=['last_object_clicked'])
     
-    # 7. EVENTOS DE CLICK EN EL MAPA
     if map_data and map_data.get("last_object_clicked"):
         lat = map_data["last_object_clicked"]["lat"]
         lng = map_data["last_object_clicked"]["lng"]
-        
         # Encontrar el barrio más cercano al click
         for b_name, b_info in BARRIOS_CARTAGENA.items():
             # Si el click es muy cerca del marcador (tolerancia geo)
