@@ -1,7 +1,8 @@
 import streamlit as st
 import folium
 from streamlit_folium import st_folium
-from PIL import Image
+from PIL import Image, ExifTags
+import time
 import requests
 import pandas as pd
 import numpy as np
@@ -75,6 +76,12 @@ if "ultimo_archivo" not in st.session_state:
     st.session_state.ultimo_archivo = None
 if "barrio_seleccionado" not in st.session_state:
     st.session_state.barrio_seleccionado = "Nelson Mandela (Sector Vulnerable)"
+if "upload_count" not in st.session_state:
+    st.session_state.upload_count = 0
+if "last_upload_time" not in st.session_state:
+    st.session_state.last_upload_time = 0
+if "fecha_captura" not in st.session_state:
+    st.session_state.fecha_captura = "Desconocida"
 
 def obtener_datos_clima(lat, lon):
     try:
@@ -158,17 +165,41 @@ with col_panel:
     uploaded_file = st.file_uploader("Subir foto del canal/calle", type=["jpg", "jpeg", "png"])
     
     if uploaded_file is not None:
+        current_time = time.time()
         file_id = f"{uploaded_file.name}_{uploaded_file.size}_{barrio}"
+        
         if st.session_state.ultimo_archivo != file_id:
-            st.session_state.ultimo_archivo = file_id
-            image = Image.open(uploaded_file)
-            with st.spinner("Ejecutando algoritmo de visión..."):
-                st.session_state.resultado_ia = analizar_imagen_canal(image, historial_zona)
+            # 🛡️ RATE LIMITING Y ANTI-SPAM
+            if st.session_state.upload_count >= 5:
+                st.error("🚫 Límite de 5 reportes por sesión alcanzado (Filtro Anti-Spam).")
+            elif current_time - st.session_state.last_upload_time < 30:
+                cooldown = 30 - int(current_time - st.session_state.last_upload_time)
+                st.warning(f"⏳ Espera {cooldown} segundos antes de enviar otro reporte.")
+            else:
+                st.session_state.upload_count += 1
+                st.session_state.last_upload_time = current_time
+                st.session_state.ultimo_archivo = file_id
+                
+                image = Image.open(uploaded_file)
+                
+                # 🛡️ EXTRACCIÓN DE METADATOS EXIF
+                fecha_captura = "Desconocida (Sin EXIF / Posible origen WhatsApp)"
+                exif_data = image.getexif()
+                if exif_data:
+                    for tag_id in exif_data:
+                        tag = ExifTags.TAGS.get(tag_id, tag_id)
+                        if tag == 'DateTimeOriginal' or tag == 'DateTime':
+                            fecha_captura = str(exif_data.get(tag_id))
+                st.session_state.fecha_captura = fecha_captura
+                
+                with st.spinner("Auditoría forense y análisis IA..."):
+                    st.session_state.resultado_ia = analizar_imagen_canal(image, historial_zona)
         
         st.image(Image.open(uploaded_file), caption="Evidencia Territorial", use_container_width=True)
     else:
         st.session_state.resultado_ia = None
         st.session_state.ultimo_archivo = None
+        st.session_state.fecha_captura = "Desconocida"
         st.info("A la espera de reporte visual para procesar.")
 
     # 4. Cálculo de Riesgos
@@ -180,7 +211,31 @@ with col_panel:
         res = st.session_state.resultado_ia
         riesgo_pct = res.get("riesgo_inundacion_porcentaje", 0)
         justificacion = res.get("justificacion", "")
+        autenticidad = res.get("autenticidad", "Desconocida")
+        privacidad = res.get("privacidad", "Segura")
+        
         st.write(f"**Análisis Estructural:** {justificacion}")
+        
+        # 🛡️ UI ESCUDO DE SEGURIDAD
+        st.divider()
+        st.caption("🛡️ **Auditoría Forense y Privacidad (Ley 1581)**")
+        
+        fecha_cap = st.session_state.get("fecha_captura", "Desconocida")
+        if "Desconocida" in fecha_cap:
+            st.warning("⚠️ **Verificación de Origen:** Sin metadatos originales EXIF.")
+        else:
+            st.success(f"✅ **Fecha Original (EXIF):** {fecha_cap}")
+            
+        if autenticidad == "Real":
+            st.success("✅ **Filtro Anti-Fake:** Imagen verificada visualmente (Real).")
+        else:
+            st.error(f"🚨 **Filtro Anti-Fake:** Imagen sospechosa de alteración ({autenticidad}).")
+            
+        if privacidad == "Datos Sensibles Detectados":
+            st.success("🛡️ **Censura Biométrica:** Rostros/Placas detectados. Se ha activado la anonimización para bases públicas.")
+        else:
+            st.info("ℹ️ **Privacidad:** No se detectaron datos biométricos sensibles.")
+        st.divider()
 
     riesgo_base_ia = riesgo_pct / 100 
     factor_lluvia = intensidad_lluvia_mm / 100

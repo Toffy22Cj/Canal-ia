@@ -29,8 +29,8 @@ def analizar_imagen_canal(imagen_pil, historial_zona="Desconocido"):
         return obtener_diagnostico_respaldo(imagen_pil)
 
     prompt = f"""
-    Eres un ingeniero experto en gestión de riesgo de desastres e infraestructura pluvial en Cartagena. 
-    Tu tarea es analizar la imagen adjunta de un canal de agua, alcantarilla o calle y determinar el riesgo de inundación basado en obstrucciones visibles.
+    Eres un ingeniero experto en gestión de riesgo de desastres e infraestructura pluvial en Cartagena, especializado en auditoría forense de imágenes. 
+    Tu tarea es analizar la imagen adjunta de un canal de agua o calle y determinar el riesgo de inundación basado en obstrucciones visibles, evaluando también su autenticidad y privacidad.
     
     Contexto Histórico del Sector: {historial_zona}.
     Usa este contexto satelital y del POT para afinar tu evaluación de riesgo. Si el sector tiene historial crítico de inundaciones, sé más riguroso en el diagnóstico preventivo.
@@ -40,8 +40,13 @@ def analizar_imagen_canal(imagen_pil, historial_zona="Desconocido"):
       "nivel_obstruccion": "Alto" | "Medio" | "Bajo" | "Ninguno",
       "tipo_problema": "Basura" | "Escombros" | "Maleza" | "Agua estancada" | "Ninguno",
       "riesgo_inundacion_porcentaje": <numero entero entre 0 y 100>,
-      "justificacion": "<Una sola oración explicando por qué diste ese porcentaje>"
+      "justificacion": "<Una sola oración explicando por qué diste ese porcentaje>",
+      "autenticidad": "Real" | "Falsa/IA" | "Dudosa",
+      "privacidad": "Segura" | "Datos Sensibles Detectados"
     }}
+    
+    Reglas Anti-Fake: Si la foto parece arte generado por IA (DALL-E/Midjourney), un dibujo, captura de pantalla, o no parece una calle/canal real, devuelve "Falsa/IA". Si tienes dudas, "Dudosa". Si parece una foto genuina capturada en la calle, "Real".
+    Reglas de Privacidad: Si identificas rostros humanos claramente reconocibles o placas de vehículos legibles, devuelve "Datos Sensibles Detectados". Si no hay datos biométricos, "Segura".
     """
 
     # --- PASO 1: Intentar con OpenRouter (Nube) ---
