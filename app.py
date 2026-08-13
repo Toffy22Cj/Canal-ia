@@ -75,7 +75,7 @@ if "resultado_ia" not in st.session_state:
 if "ultimo_archivo" not in st.session_state:
     st.session_state.ultimo_archivo = None
 if "barrio_seleccionado" not in st.session_state:
-    st.session_state.barrio_seleccionado = "Nelson Mandela (Sector Vulnerable)"
+    st.session_state.barrio_seleccionado = "Nelson Mandela / San Fernando (Localidad 3)"
 if "upload_count" not in st.session_state:
     st.session_state.upload_count = 0
 if "last_upload_time" not in st.session_state:
@@ -97,18 +97,32 @@ def obtener_datos_clima(lat, lon):
     except Exception:
         return {"lluvia": 0.0, "temp": 30.0, "hum": 70, "viento": 12.0}
 
+# --- BASE DE DATOS TERRITORIAL (Respaldada por POT, IDEAM y Análisis SAR) ---
 BARRIOS_CARTAGENA = {
-    "Nelson Mandela (Sector Vulnerable)": {"coords": [10.3685, -75.4981], "historial": "Crítico (Alta incidencia 2017-2024, Desborde de arroyos - Ref: POMCA)"},
-    "El Pozón (Sector Isla de León)": {"coords": [10.3881, -75.4722], "historial": "Crítico (6 km² inundados en 2017 según imágenes satelitales SAR Sentinel-1)"},
-    "Olaya Herrera (Sector Central)": {"coords": [10.4015, -75.4923], "historial": "Alto (Afectación constante Vía Perimetral y Ciénaga de la Virgen)"},
-    "La Boquilla (Sector Playa)": {"coords": [10.4633, -75.4967], "historial": "Alto (Inundaciones continuas en Nov 2022 por marea y lluvias prolongadas)"},
-    "La María": {"coords": [10.4285, -75.5081], "historial": "Alto (Vulnerabilidad estructural y desbordamiento fluvial)"},
-    "San Fernando": {"coords": [10.3812, -75.4985], "historial": "Alto (8 eventos históricos de inundación registrados en zona suroriente)"},
-    "Centro Histórico": {"coords": [10.4236, -75.5512], "historial": "Medio (Vulnerabilidad a mareas altas y mar de leva)"},
-    "Cerro de La Popa / Loma del Marión": {"coords": [10.4190, -75.5250], "historial": "Crítico - Remoción en Masa (Deslizamientos históricos reportados por SIMMA y OAGRD)"},
-    "Tierra Bomba / Bocachica": {"coords": [10.3544, -75.5683], "historial": "Alto (Erosión costera severa e inundaciones por mar de leva - Talleres Participativos)"},
-    "Barú (Sector Pital)": {"coords": [10.2225, -75.5786], "historial": "Medio-Alto (Problemas con sistema de drenaje e inundaciones por lluvias intensas)"},
-    "Pasacaballos": {"coords": [10.2819, -75.5161], "historial": "Medio (Inundaciones asociadas a lluvias y al Canal del Dique)"}
+    "Olaya Herrera (Localidad 2)": {
+        "coords": [10.4015, -75.4923], 
+        "historial": "Crítico. Inundaciones asociadas a lluvias que incrementan el nivel de la Ciénaga de la Virgen (POT)."
+    },
+    "Nelson Mandela / San Fernando (Localidad 3)": {
+        "coords": [10.3812, -75.4985], 
+        "historial": "Alto. Inundaciones recurrentes asociadas al desbordamiento de arroyos por fuertes lluvias (Cartografía Social POT)."
+    },
+    "Torices / San Pedro (Localidad 1)": {
+        "coords": [10.4300, -75.5300],
+        "historial": "Medio-Alto. Inundaciones frecuentes debido a problemas con la red de alcantarillado y lluvias (POT)."
+    },
+    "Zaragocilla / La Popa": {
+        "coords": [10.4025, -75.5043],
+        "historial": "Riesgo Mixto. Alta vulnerabilidad a eventos de remoción en masa (deslizamientos) e inundaciones."
+    },
+    "Aeropuerto / Crespo": {
+        "coords": [10.4435, -75.5160],
+        "historial": "Crítico Estratégico. Zona recurrente de inundación detectada por radares Sentinel-1, afectando infraestructura de movilidad."
+    },
+    "Centro / Getsemaní": {
+        "coords": [10.4236, -75.5512],
+        "historial": "Alto. Riesgo de inundación en el sistema de caños y lagos (Tr 25-100 años)."
+    }
 }
 
 st.markdown('<h2 class="dashboard-header">🌊 MIDAS x AlertaMarea (Visor Territorial)</h2>', unsafe_allow_html=True)
