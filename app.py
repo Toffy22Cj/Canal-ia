@@ -3,6 +3,8 @@ import folium
 from streamlit_folium import st_folium
 from PIL import Image
 import requests
+import pandas as pd
+import numpy as np
 
 # Importar nuestro "cerebro" local que acabas de crear
 from vision_ai import analizar_imagen_canal
@@ -48,6 +50,16 @@ st.markdown("""
         font-weight: 700;
         margin-bottom: 0px;
     }
+    
+    /* Tarjeta de clima premium */
+    .weather-card {
+        background: rgba(30, 41, 59, 0.6);
+        padding: 18px;
+        border-radius: 12px;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2);
+        margin-bottom: 20px;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -56,15 +68,25 @@ st.markdown('<h1 class="dashboard-header">🌊 AlertaMarea x Canal IA</h1>', uns
 st.markdown("**Sistema Inteligente de Detección Temprana y Priorización - Cartagena**")
 st.write("")
 
-def obtener_precipitacion_real(lat, lon):
-    """Consulta la API pública de Open-Meteo para obtener la lluvia actual en mm."""
+def obtener_datos_clima(lat, lon):
+    """Consulta la API pública de Open-Meteo para obtener datos completos del clima actual."""
     try:
-        url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&current=precipitation"
+        url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&current=precipitation,temperature_2m,relative_humidity_2m,wind_speed_10m"
         response = requests.get(url, timeout=3).json()
-        precipitacion = response.get("current", {}).get("precipitation", 0.0)
-        return precipitacion
+        current = response.get("current", {})
+        return {
+            "lluvia": current.get("precipitation", 0.0),
+            "temp": current.get("temperature_2m", 30.2),
+            "hum": current.get("relative_humidity_2m", 78),
+            "viento": current.get("wind_speed_10m", 14.5)
+        }
     except Exception:
-        return 0.0  # Fallback seguro si no hay internet o falla la API
+        return {
+            "lluvia": 0.0,
+            "temp": 30.0,
+            "hum": 70,
+            "viento": 12.0
+        }
 
 # Diccionario con puntos críticos de Cartagena (Latitud, Longitud)
 BARRIOS_CARTAGENA = {
@@ -93,24 +115,53 @@ with st.sidebar:
     )
 
     st.divider()
-    st.subheader("⛈️ Monitoreo Climatológico")
+    st.subheader("⛈️ Radar Meteorológico")
 
-    # 3. Lluvia Real vs Simulación
-    lluvia_real_mm = obtener_precipitacion_real(coords[0], coords[1])
-    st.caption(f"流️ Precipitación actual en API: **{lluvia_real_mm} mm**")
+    # 3. Consultar datos meteorológicos en tiempo real
+    clima = obtener_datos_clima(coords[0], coords[1])
+    
+    # Renderizar tarjeta de clima premium
+    st.markdown(f"""
+        <div class="weather-card">
+            <h5 style="color: #6366f1; margin: 0 0 8px 0;">🌤️ Clima Real en {barrio_seleccionado.split(' ')[0]}</h5>
+            <div style="font-size: 2.2rem; font-weight: 700; color: #f8fafc; margin-bottom: 5px;">{clima['temp']}°C</div>
+            <div style="display: flex; justify-content: space-between; font-size: 0.85rem; color: #94a3b8; margin-bottom: 8px;">
+                <span>💧 Humedad: {clima['hum']}%</span>
+                <span>💨 Viento: {clima['viento']} km/h</span>
+            </div>
+            <div style="font-size: 0.85rem; color: #38bdf8; font-weight: bold;">🌧️ Precipitación actual: {clima['lluvia']} mm</div>
+        </div>
+    """, unsafe_allow_html=True)
 
-    # Checkbox para forzar lluvia en la demo si no está lloviendo afuera
-    simular_lluvia = st.checkbox(
-        "⚡ Forzar Simulación de Tormenta", 
-        value=(lluvia_real_mm > 1.0)
+    # Pre-configurar el deslizador según el clima real (redondeado a paso de 5)
+    default_slider_val = min(100, max(0, int(round(clima['lluvia'] / 5.0) * 5)))
+
+    # Deslizador dinámico de intensidad de lluvia
+    intensidad_lluvia_mm = st.slider(
+        "Intensidad de Lluvia (mm/h)", 
+        min_value=0, 
+        max_value=100, 
+        value=default_slider_val, 
+        step=5,
+        help="Desliza para simular cómo evoluciona la tormenta sobre el sector."
     )
 
-# Lluvia activa si la API dice que llueve O si activaste la simulación manual
-hay_lluvia_activa = (lluvia_real_mm > 1.0) or simular_lluvia
+    # Clasificación del clima según el milimetraje
+    if intensidad_lluvia_mm == 0:
+        estado_clima = "Despejado"
+    elif intensidad_lluvia_mm <= 20:
+        estado_clima = "Llovizna"
+    elif intensidad_lluvia_mm <= 50:
+        estado_clima = "Lluvia Fuerte"
+    else:
+        estado_clima = "Tormenta Severa"
+
+    st.caption(f"☁️ Pronóstico simulado: **{estado_clima}**")
 
 # --- DISEÑO PRINCIPAL (2 Columnas) ---
 col_mapa, col_resultados = st.columns([2, 1])
-riesgo_alto_ia = False
+riesgo_pct = 0
+resultado_procesado = False
 
 # --- COLUMNA DERECHA: PROCESAMIENTO DE IA ---
 with col_resultados:
@@ -127,6 +178,7 @@ with col_resultados:
         motivo = resultado.get("tipo_problema", "Desconocido")
         riesgo_pct = resultado.get("riesgo_inundacion_porcentaje", 0)
         justificacion = resultado.get("justificacion", "")
+        resultado_procesado = True
 
         st.metric(label="Obstrucción Canales", value=f"{nivel}")
         st.metric(
@@ -137,31 +189,47 @@ with col_resultados:
         )
         st.write(f"**Diagnóstico:** {justificacion}")
 
-        if nivel in ["Alto", "Medio"] or riesgo_pct > 60:
-            riesgo_alto_ia = True
+        # Datos simulados de reportes históricos por mes para vista dashboard B2G
+        st.divider()
+        st.caption("📊 Histórico de Reportes (Últimos 6 meses)")
+        datos_historicos = pd.DataFrame(
+            np.random.randint(10, 50, size=(6, 2)),
+            columns=['Reportes Ciudadanos', 'Limpiezas Ejecutadas'],
+            index=['Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago']
+        )
+        st.bar_chart(datos_historicos, color=["#6366f1", "#475569"])
     else:
         st.info("👈 Selecciona el barrio y sube una foto para analizar el riesgo.")
 
-# --- MOTOR DE DECISIÓN DE ALERTAMAREA ---
-if riesgo_alto_ia and hay_lluvia_activa:
+# --- MOTOR DE DECISIÓN MULTIVARIABLE DE ALERTAMAREA ---
+# Ponderación: 60% importa cómo está el canal (IA), 40% importa cuánto llueve (Slider)
+riesgo_base_ia = riesgo_pct / 100 
+factor_lluvia = intensidad_lluvia_mm / 100
+
+riesgo_total_calculado = (riesgo_base_ia * 0.6) + (factor_lluvia * 0.4)
+riesgo_total_pct = int(riesgo_total_calculado * 100)
+
+# Decisiones visuales basadas en el riesgo TOTAL
+if riesgo_total_pct >= 75:
     color_marcador = "red"
     icono_marcador = "warning-sign"
-    mensaje_alerta = f"🚨 ALERTA ROJA en {barrio_seleccionado}: Obstrucción severa + precipitaciones. Riesgo inminente de inundación."
-elif riesgo_alto_ia and not hay_lluvia_activa:
+    mensaje_alerta = f"🚨 ALERTA ROJA (Riesgo: {riesgo_total_pct}%): Evacuación o intervención inmediata en {barrio_seleccionado}. Canal obstruido en plena tormenta."
+elif riesgo_total_pct >= 50:
     color_marcador = "orange"
     icono_marcador = "info-sign"
-    mensaje_alerta = f"⚠️ ALERTA NARANJA en {barrio_seleccionado}: Obstrucción en canal detectada. Programar limpieza antes de lluvias."
-elif hay_lluvia_activa and not riesgo_alto_ia:
+    mensaje_alerta = f"⚠️ ALERTA NARANJA (Riesgo: {riesgo_total_pct}%): Capacidad de drenaje comprometida en {barrio_seleccionado}. Monitoreo preventivo activo."
+elif riesgo_total_pct >= 25:
     color_marcador = "blue"
     icono_marcador = "tint"
-    mensaje_alerta = f"ℹ️ ALERTA AZUL en {barrio_seleccionado}: Lluvia en curso, pero el canal está despejado."
+    mensaje_alerta = f"ℹ️ ALERTA AZUL (Riesgo: {riesgo_total_pct}%): Precipitaciones moderadas en {barrio_seleccionado}. Canal con flujo estable."
 else:
     color_marcador = "green"
     icono_marcador = "ok-circle"
-    mensaje_alerta = f"🟢 ZONA SEGURA: Sin novedades en {barrio_seleccionado}."
+    mensaje_alerta = f"🟢 ZONA SEGURA (Riesgo: {riesgo_total_pct}%): Flujo de agua óptimo en {barrio_seleccionado}."
 
-# --- MAPA ---
+# --- COLUMNA IZQUIERDA: MAPA E INDICADORES ---
 with col_mapa:
+    # 1. Imprimir la barra de estado
     if color_marcador == "red":
         st.error(mensaje_alerta)
     elif color_marcador == "orange":
@@ -170,14 +238,17 @@ with col_mapa:
         st.info(mensaje_alerta)
     else:
         st.success(mensaje_alerta)
+        
+    st.subheader("🗺️ Radar Territorial Inteligente")
 
-    # El mapa se centra exactamente en las coordenadas del barrio seleccionado
+    # 2. Configurar el mapa interactivo
     mapa = folium.Map(
         location=coords, 
         zoom_start=14, 
         tiles="CartoDB dark_matter"
     )
 
+    # 3. Marcador central del reporte
     folium.Marker(
         location=coords,
         popup=mensaje_alerta,
@@ -185,4 +256,18 @@ with col_mapa:
         icon=folium.Icon(color=color_marcador, icon=icono_marcador),
     ).add_to(mapa)
 
+    # 4. Círculo de Afectación Dinámico
+    # Si llueve, el radio de impacto de la inundación crece visualmente
+    radio_impacto = 100 + (intensidad_lluvia_mm * 4) # Base 100m + crecimiento por lluvia
+    
+    folium.Circle(
+        location=coords,
+        radius=radio_impacto,
+        color=color_marcador,
+        fill=True,
+        fill_opacity=0.3,
+        tooltip=f"Radio de afectación estimado: {radio_impacto} metros"
+    ).add_to(mapa)
+
+    # 5. Renderizar el mapa
     st_folium(mapa, width=720, height=500)
