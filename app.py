@@ -101,18 +101,21 @@ def obtener_datos_clima(lat, lon):
         return {"lluvia": 0.0, "temp": 30.0, "hum": 70, "viento": 12.0}
 
 BARRIOS_CARTAGENA = {
-    "El Pozón (Sector Isla de León)": [10.3881, -75.4722],
-    "Olaya Herrera (Sector Central)": [10.4015, -75.4923],
-    "La María": [10.4285, -75.5081],
-    "San Fernando": [10.3812, -75.4985],
-    "Centro Histórico": [10.4236, -75.5512]
+    "Nelson Mandela (Sector Vulnerable)": {"coords": [10.3685, -75.4981], "historial": "Crítico (Alta incidencia 2017-2024, Desborde de arroyos - Ref: POMCA)"},
+    "El Pozón (Sector Isla de León)": {"coords": [10.3881, -75.4722], "historial": "Crítico (6 km² inundados en 2017 según imágenes satelitales SAR Sentinel-1)"},
+    "Olaya Herrera (Sector Central)": {"coords": [10.4015, -75.4923], "historial": "Alto (Afectación constante Vía Perimetral y Ciénaga de la Virgen)"},
+    "La Boquilla (Sector Playa)": {"coords": [10.4633, -75.4967], "historial": "Alto (Inundaciones continuas en Nov 2022 por marea y lluvias prolongadas)"},
+    "La María": {"coords": [10.4285, -75.5081], "historial": "Alto (Vulnerabilidad estructural y desbordamiento fluvial)"},
+    "San Fernando": {"coords": [10.3812, -75.4985], "historial": "Alto (8 eventos históricos de inundación registrados en zona suroriente)"},
+    "Centro Histórico": {"coords": [10.4236, -75.5512], "historial": "Medio (Vulnerabilidad a mareas altas y mar de leva)"}
 }
 
 # --- PANEL LATERAL (SIDEBAR) ---
 with st.sidebar:
     st.header("🎛️ Centro de Operaciones")
     barrio_seleccionado = st.selectbox("📍 Ubicación del Reporte (Sector)", list(BARRIOS_CARTAGENA.keys()))
-    coords = BARRIOS_CARTAGENA[barrio_seleccionado]
+    coords = BARRIOS_CARTAGENA[barrio_seleccionado]["coords"]
+    historial_zona = BARRIOS_CARTAGENA[barrio_seleccionado]["historial"]
 
     uploaded_file = st.file_uploader("📸 Reporte Ciudadano (Subir Foto)", type=["jpg", "jpeg", "png"])
 
@@ -152,7 +155,7 @@ if uploaded_file is not None:
         st.session_state.ultimo_archivo = file_id
         image = Image.open(uploaded_file)
         with st.spinner("Procesando imagen con IA..."):
-            st.session_state.resultado_ia = analizar_imagen_canal(image)
+            st.session_state.resultado_ia = analizar_imagen_canal(image, historial_zona)
 else:
     st.session_state.resultado_ia = None
     st.session_state.ultimo_archivo = None
@@ -243,6 +246,10 @@ with col_detalles:
         st.write(f"**Análisis de la IA:** {justificacion}")
     else:
         st.info("👈 Sube una fotografía de un canal para ver el reporte detallado.")
+        
+    st.divider()
+    st.caption("📚 **Contexto de Vulnerabilidad Histórica**")
+    st.info(f"Según estudios satelitales (Sentinel-1) y POT: **{historial_zona}**")
         
     st.divider()
     st.caption("📊 Histórico de Reportes (Últimos 6 meses)")

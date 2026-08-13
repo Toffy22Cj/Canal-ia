@@ -10,7 +10,7 @@ from dotenv import load_dotenv
 load_dotenv()
 openrouter_key = os.getenv("OPENROUTER_API_KEY")
 
-def analizar_imagen_canal(imagen_pil):
+def analizar_imagen_canal(imagen_pil, historial_zona="Desconocido"):
     """
     Recibe un objeto PIL Image y ejecuta un análisis en cascada de triple redundancia:
     1. Trata de usar OpenRouter en la nube (GPT-4o con límite de tokens, o Gemini Flash 2.0 Free).
@@ -28,17 +28,20 @@ def analizar_imagen_canal(imagen_pil):
         print(f"Error procesando imagen localmente: {e}")
         return obtener_diagnostico_respaldo(imagen_pil)
 
-    prompt = """
+    prompt = f"""
     Eres un ingeniero experto en gestión de riesgo de desastres e infraestructura pluvial en Cartagena. 
     Tu tarea es analizar la imagen adjunta de un canal de agua, alcantarilla o calle y determinar el riesgo de inundación basado en obstrucciones visibles.
+    
+    Contexto Histórico del Sector: {historial_zona}.
+    Usa este contexto satelital y del POT para afinar tu evaluación de riesgo. Si el sector tiene historial crítico de inundaciones, sé más riguroso en el diagnóstico preventivo.
 
     Tu respuesta debe ser estrictamente un objeto JSON válido con la siguiente estructura:
-    {
+    {{
       "nivel_obstruccion": "Alto" | "Medio" | "Bajo" | "Ninguno",
       "tipo_problema": "Basura" | "Escombros" | "Maleza" | "Agua estancada" | "Ninguno",
       "riesgo_inundacion_porcentaje": <numero entero entre 0 y 100>,
       "justificacion": "<Una sola oración explicando por qué diste ese porcentaje>"
-    }
+    }}
     """
 
     # --- PASO 1: Intentar con OpenRouter (Nube) ---
