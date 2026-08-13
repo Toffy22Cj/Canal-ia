@@ -9,10 +9,10 @@ import numpy as np
 # Importar nuestro "cerebro" local
 from vision_ai import analizar_imagen_canal
 
-# 1. CONFIGURACIÓN DE PÁGINA (Debe ir primero)
+# 1. CONFIGURACIÓN DE PÁGINA
 st.set_page_config(page_title="AlertaMarea x Canal IA", layout="wide", page_icon="🌊")
 
-# CSS personalizado para darle un toque premium de centro de comando
+# CSS personalizado (Estilo Dark GIS / MIDAS)
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap');
@@ -26,15 +26,7 @@ st.markdown("""
         padding: 15px;
         border-radius: 12px;
         border-left: 4px solid #00ffca;
-        border-top: 1px solid rgba(255, 255, 255, 0.05);
-        border-right: 1px solid rgba(255, 255, 255, 0.05);
-        border-bottom: 1px solid rgba(255, 255, 255, 0.05);
         box-shadow: 0 4px 15px rgba(0,0,0,0.15);
-    }
-    
-    .stAlert {
-        border-radius: 12px !important;
-        font-weight: bold;
     }
     
     .dashboard-header {
@@ -48,11 +40,12 @@ st.markdown("""
     
     .weather-card {
         background: rgba(30, 41, 59, 0.6);
-        padding: 18px;
+        padding: 15px;
         border-radius: 12px;
         border: 1px solid rgba(255, 255, 255, 0.08);
         box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2);
-        margin-bottom: 20px;
+        margin-bottom: 15px;
+        margin-top: 15px;
     }
     
     .result-card {
@@ -61,7 +54,7 @@ st.markdown("""
         padding: 15px;
         border: 1px solid rgba(255, 255, 255, 0.06);
         box-shadow: 0 4px 15px rgba(0, 0, 0, 0.15);
-        height: 100%;
+        margin-bottom: 15px;
     }
     
     .result-card-header {
@@ -75,16 +68,13 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# Título Principal
-st.markdown('<h1 class="dashboard-header">🌊 AlertaMarea x Canal IA</h1>', unsafe_allow_html=True)
-st.markdown("**Sistema Inteligente de Detección Temprana y Priorización - Cartagena**")
-st.write("")
-
-# Inicializar cache en st.session_state
+# Inicializar estados de la sesión
 if "resultado_ia" not in st.session_state:
     st.session_state.resultado_ia = None
 if "ultimo_archivo" not in st.session_state:
     st.session_state.ultimo_archivo = None
+if "barrio_seleccionado" not in st.session_state:
+    st.session_state.barrio_seleccionado = "Nelson Mandela (Sector Vulnerable)"
 
 def obtener_datos_clima(lat, lon):
     try:
@@ -114,152 +104,169 @@ BARRIOS_CARTAGENA = {
     "Pasacaballos": {"coords": [10.2819, -75.5161], "historial": "Medio (Inundaciones asociadas a lluvias y al Canal del Dique)"}
 }
 
-# --- PANEL LATERAL (SIDEBAR) ---
-with st.sidebar:
-    st.header("🎛️ Centro de Operaciones")
-    barrio_seleccionado = st.selectbox("📍 Ubicación del Reporte (Sector)", list(BARRIOS_CARTAGENA.keys()))
-    coords = BARRIOS_CARTAGENA[barrio_seleccionado]["coords"]
-    historial_zona = BARRIOS_CARTAGENA[barrio_seleccionado]["historial"]
+st.markdown('<h2 class="dashboard-header">🌊 MIDAS x AlertaMarea (Visor Territorial)</h2>', unsafe_allow_html=True)
+st.write("")
 
-    uploaded_file = st.file_uploader("📸 Reporte Ciudadano (Subir Foto)", type=["jpg", "jpeg", "png"])
+# --- INTERFAZ TIPO MIDAS (2 COLUMNAS) ---
+# Columna izquierda: Panel de Navegación y Estadísticas (1.2)
+# Columna derecha: Mapa Interactivo (2.8)
+col_panel, col_mapa = st.columns([1.2, 2.8])
 
-    st.divider()
-    st.subheader("⛈️ Radar Meteorológico")
+with col_panel:
+    # 1. Buscador de Territorios
+    lista_barrios = list(BARRIOS_CARTAGENA.keys())
+    try:
+        index_barrio = lista_barrios.index(st.session_state.barrio_seleccionado)
+    except ValueError:
+        index_barrio = 0
+        
+    nuevo_barrio = st.selectbox("🔍 Territorio / Capa de Análisis", lista_barrios, index=index_barrio)
+    if nuevo_barrio != st.session_state.barrio_seleccionado:
+        st.session_state.barrio_seleccionado = nuevo_barrio
+        st.rerun()
+
+    barrio = st.session_state.barrio_seleccionado
+    coords = BARRIOS_CARTAGENA[barrio]["coords"]
+    historial_zona = BARRIOS_CARTAGENA[barrio]["historial"]
+    nombre_barrio_corto = barrio.split(' (')[0]
+
+    # 2. Clima y Simulación Meteorológica
     clima = obtener_datos_clima(coords[0], coords[1])
-    
-    # Extraer el nombre corto del barrio (Ej: "El Pozón" en lugar de "El")
-    nombre_barrio_corto = barrio_seleccionado.split(' (')[0]
     
     st.markdown(f"""
         <div class="weather-card">
-            <h5 style="color: #6366f1; margin: 0 0 8px 0;">🌤️ Clima Real en {nombre_barrio_corto}</h5>
+            <h5 style="color: #6366f1; margin: 0 0 8px 0;">🌤️ Clima en {nombre_barrio_corto}</h5>
             <div style="font-size: 2.2rem; font-weight: 700; color: #f8fafc; margin-bottom: 5px;">{clima['temp']}°C</div>
             <div style="display: flex; justify-content: space-between; font-size: 0.85rem; color: #94a3b8; margin-bottom: 8px;">
                 <span>💧 Humedad: {clima['hum']}%</span>
                 <span>💨 Viento: {clima['viento']} km/h</span>
             </div>
-            <div style="font-size: 0.85rem; color: #38bdf8; font-weight: bold;">🌧️ Precipitación actual: {clima['lluvia']} mm</div>
         </div>
     """, unsafe_allow_html=True)
 
     default_slider_val = min(100, max(0, int(round(clima['lluvia'] / 5.0) * 5)))
-    intensidad_lluvia_mm = st.slider("Intensidad de Lluvia (mm/h)", 0, 100, default_slider_val, 5)
+    intensidad_lluvia_mm = st.slider("Simulador Lluvia (mm/h)", 0, 100, default_slider_val, 5)
 
     if intensidad_lluvia_mm == 0: clasif_lluvia = "☀️ Despejado"
     elif intensidad_lluvia_mm <= 20: clasif_lluvia = "🌧️ Llovizna"
     elif intensidad_lluvia_mm <= 50: clasif_lluvia = "⛈️ Lluvia Media"
     elif intensidad_lluvia_mm <= 80: clasif_lluvia = "⛈️ Lluvia Fuerte"
     else: clasif_lluvia = "🚨 Tormenta"
-    st.caption(f"☁️ Pronóstico simulado: **{clasif_lluvia}**")
 
-# --- LÓGICA DE PROCESAMIENTO IA ---
-if uploaded_file is not None:
-    file_id = f"{uploaded_file.name}_{uploaded_file.size}"
-    if st.session_state.ultimo_archivo != file_id:
-        st.session_state.ultimo_archivo = file_id
-        image = Image.open(uploaded_file)
-        with st.spinner("Procesando imagen con IA..."):
-            st.session_state.resultado_ia = analizar_imagen_canal(image, historial_zona)
-else:
-    st.session_state.resultado_ia = None
-    st.session_state.ultimo_archivo = None
-
-riesgo_pct = 0
-nivel_obstruccion = "Ninguno"
-tipo_problema = "Sin anomalías"
-justificacion = "Sube una foto para iniciar el diagnóstico inteligente."
-
-if st.session_state.resultado_ia is not None:
-    res = st.session_state.resultado_ia
-    nivel_obstruccion = res.get("nivel_obstruccion", "Ninguno")
-    tipo_problema = res.get("tipo_problema", "Desconocido")
-    riesgo_pct = res.get("riesgo_inundacion_porcentaje", 0)
-    justificacion = res.get("justificacion", "")
-
-riesgo_base_ia = riesgo_pct / 100 
-factor_lluvia = intensidad_lluvia_mm / 100
-riesgo_total_pct = int(((riesgo_base_ia * 0.6) + (factor_lluvia * 0.4)) * 100)
-
-if riesgo_total_pct >= 75:
-    color_marcador, icono_marcador, alerta_txt = "red", "warning-sign", f"🚨 EMERGENCIA ROJA: Evacuación o intervención inmediata en {nombre_barrio_corto}."
-    estado_ui = st.error
-elif riesgo_total_pct >= 50:
-    color_marcador, icono_marcador, alerta_txt = "orange", "info-sign", f"⚠️ ALERTA NARANJA: Capacidad de drenaje comprometida en {nombre_barrio_corto}."
-    estado_ui = st.warning
-elif riesgo_total_pct >= 25:
-    color_marcador, icono_marcador, alerta_txt = "blue", "tint", f"ℹ️ ALERTA AZUL: Monitoreo rutinario activo en {nombre_barrio_corto}."
-    estado_ui = st.info
-else:
-    color_marcador, icono_marcador, alerta_txt = "green", "ok-circle", f"🟢 ZONA SEGURA: Flujo de agua óptimo en {nombre_barrio_corto}."
-    estado_ui = st.success
-
-# ==========================================
-# 📊 PANEL SUPERIOR: KPIs (3 Columnas)
-# ==========================================
-col_kpi1, col_kpi2, col_kpi3 = st.columns(3)
-
-with col_kpi1:
-    st.markdown('<div class="result-card"><div class="result-card-header">👁️ Visión Artificial (IA)</div>', unsafe_allow_html=True)
-    st.metric(label="Nivel Obstrucción", value=f"{nivel_obstruccion}", delta=tipo_problema, delta_color="inverse")
-    st.write(f"**Riesgo Base (IA):** {riesgo_pct}%")
-    st.markdown('</div>', unsafe_allow_html=True)
-
-with col_kpi2:
-    st.markdown('<div class="result-card"><div class="result-card-header">⛈️ Clima Simulado</div>', unsafe_allow_html=True)
-    st.metric(label="Intensidad de Lluvia", value=f"{intensidad_lluvia_mm} mm/h", delta=clasif_lluvia, delta_color="off")
-    st.write(f"**Afectación estimada:** +{int(factor_lluvia * 40)}% al riesgo.")
-    st.markdown('</div>', unsafe_allow_html=True)
-
-with col_kpi3:
-    st.markdown('<div class="result-card"><div class="result-card-header">⚡ Riesgo Agregado</div>', unsafe_allow_html=True)
-    st.metric(label="Riesgo Total", value=f"{riesgo_total_pct}%")
-    estado_ui(alerta_txt)  # Renderiza la alerta dentro de la tarjeta!
-    st.markdown('</div>', unsafe_allow_html=True)
-
-st.write("") # Espaciador
-
-# ==========================================
-# 🗺️ PANEL INFERIOR: MAPA Y DETALLES (2 Columnas)
-# ==========================================
-col_mapa, col_detalles = st.columns([2, 1])
-
-with col_mapa:
-    st.subheader("🗺️ Radar Territorial")
-    estado_ui(alerta_txt) # Banner general antes del mapa
+    # 3. Reporte Ciudadano (Inteligencia Artificial)
+    st.markdown('<div class="result-card"><div class="result-card-header">📷 Visión IA & Sensores</div>', unsafe_allow_html=True)
+    uploaded_file = st.file_uploader("Subir foto del canal/calle", type=["jpg", "jpeg", "png"])
     
-    mapa = folium.Map(location=coords, zoom_start=14, tiles="CartoDB dark_matter")
-    folium.Marker(
-        location=coords, popup=alerta_txt, tooltip=f"📍 Sector: {nombre_barrio_corto}", 
-        icon=folium.Icon(color=color_marcador, icon=icono_marcador)
-    ).add_to(mapa)
-    
-    radio_impacto = 100 + (intensidad_lluvia_mm * 4)
-    folium.Circle(
-        location=coords, radius=radio_impacto, color=color_marcador, 
-        fill=True, fill_opacity=0.3, tooltip=f"Radio de afectación: {radio_impacto}m"
-    ).add_to(mapa)
-    
-    # use_container_width soluciona los mapas cortados o negros
-    st_folium(mapa, height=450, use_container_width=True)
-
-with col_detalles:
-    st.subheader("📸 Reporte / Diagnóstico")
     if uploaded_file is not None:
-        image = Image.open(uploaded_file)
-        st.image(image, caption="Imagen procesada", use_container_width=True)
-        st.write(f"**Análisis de la IA:** {justificacion}")
+        file_id = f"{uploaded_file.name}_{uploaded_file.size}_{barrio}"
+        if st.session_state.ultimo_archivo != file_id:
+            st.session_state.ultimo_archivo = file_id
+            image = Image.open(uploaded_file)
+            with st.spinner("Ejecutando algoritmo de visión..."):
+                st.session_state.resultado_ia = analizar_imagen_canal(image, historial_zona)
+        
+        st.image(Image.open(uploaded_file), caption="Evidencia Territorial", use_container_width=True)
     else:
-        st.info("👈 Sube una fotografía de un canal para ver el reporte detallado.")
-        
-    st.divider()
-    st.caption("📚 **Contexto de Vulnerabilidad Histórica**")
-    st.info(f"Según estudios satelitales (Sentinel-1) y POT: **{historial_zona}**")
-        
-    st.divider()
-    st.caption("📊 Histórico de Reportes (Últimos 6 meses)")
+        st.session_state.resultado_ia = None
+        st.session_state.ultimo_archivo = None
+        st.info("A la espera de reporte visual para procesar.")
+
+    # 4. Cálculo de Riesgos
+    riesgo_pct = 0
+    nivel_obstruccion = "Ninguno"
+    justificacion = ""
+
+    if st.session_state.resultado_ia is not None:
+        res = st.session_state.resultado_ia
+        riesgo_pct = res.get("riesgo_inundacion_porcentaje", 0)
+        justificacion = res.get("justificacion", "")
+        st.write(f"**Análisis Estructural:** {justificacion}")
+
+    riesgo_base_ia = riesgo_pct / 100 
+    factor_lluvia = intensidad_lluvia_mm / 100
+    riesgo_total_pct = int(((riesgo_base_ia * 0.6) + (factor_lluvia * 0.4)) * 100)
+
+    if riesgo_total_pct >= 75:
+        color_marcador, icono_marcador, alerta_txt = "red", "warning-sign", f"🚨 ROJA: Evacuación / Desborde inminente."
+        estado_ui = st.error
+    elif riesgo_total_pct >= 50:
+        color_marcador, icono_marcador, alerta_txt = "orange", "info-sign", f"⚠️ NARANJA: Capacidad drenaje superada."
+        estado_ui = st.warning
+    elif riesgo_total_pct >= 25:
+        color_marcador, icono_marcador, alerta_txt = "blue", "tint", f"ℹ️ AZUL: Monitoreo rutinario activo."
+        estado_ui = st.info
+    else:
+        color_marcador, icono_marcador, alerta_txt = "green", "ok-circle", f"🟢 SEGURA: Flujo de agua óptimo."
+        estado_ui = st.success
+
+    st.metric(label="Índice de Riesgo Agregado", value=f"{riesgo_total_pct}%", delta=f"{clasif_lluvia}")
+    estado_ui(alerta_txt)
+    st.markdown('</div>', unsafe_allow_html=True)
+    
+    # 5. Estadísticas y Datos Históricos
+    st.markdown('<div class="result-card"><div class="result-card-header">📚 Historial de Vulnerabilidad</div>', unsafe_allow_html=True)
+    st.write(f"**Georreferenciación {nombre_barrio_corto}**: {historial_zona}")
+    
+    st.caption("Estadísticas de Emergencia (Último semestre)")
     datos_historicos = pd.DataFrame(
         np.random.randint(10, 50, size=(6, 2)),
-        columns=['Reportes', 'Limpiezas'],
+        columns=['Inundaciones', 'Remoción en Masa'],
         index=['Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago']
     )
-    st.bar_chart(datos_historicos, color=["#6366f1", "#475569"])
+    st.bar_chart(datos_historicos, color=["#3b82f6", "#ef4444"], height=160)
+    st.markdown('</div>', unsafe_allow_html=True)
+
+
+with col_mapa:
+    # 6. Mapeo GIS Interactivo
+    # Inicializar el mapa en un punto central de Cartagena
+    map_center = [10.3910, -75.4794]
+    # Si el usuario hace zoom out, que vea toda Cartagena
+    mapa = folium.Map(location=map_center, zoom_start=12, tiles="CartoDB dark_matter")
+    
+    radio_impacto = 100 + (intensidad_lluvia_mm * 4)
+
+    # Dibujar TODOS los puntos de monitoreo
+    for b_name, b_info in BARRIOS_CARTAGENA.items():
+        b_coords = b_info["coords"]
+        if b_name == barrio:
+            # Marcador activo (Resaltado)
+            folium.Marker(
+                location=b_coords, 
+                popup=alerta_txt, 
+                tooltip=f"📍 {b_name} (ACTIVO)", 
+                icon=folium.Icon(color=color_marcador, icon=icono_marcador, prefix='glyphicon')
+            ).add_to(mapa)
+            # Círculo de afectación
+            folium.Circle(
+                location=b_coords, 
+                radius=radio_impacto, 
+                color=color_marcador, 
+                fill=True, 
+                fill_opacity=0.3, 
+                tooltip=f"Radio afectación: {radio_impacto}m"
+            ).add_to(mapa)
+        else:
+            # Marcadores inactivos (Listos para recibir click)
+            folium.Marker(
+                location=b_coords, 
+                tooltip=f"📌 {b_name} (Click para monitorear)", 
+                icon=folium.Icon(color="darkblue", icon="eye-open", prefix='glyphicon')
+            ).add_to(mapa)
+            
+    # Renderizar mapa interactivo
+    map_data = st_folium(mapa, use_container_width=True, height=850)
+    
+    # 7. EVENTOS DE CLICK EN EL MAPA
+    if map_data and map_data.get("last_object_clicked"):
+        lat = map_data["last_object_clicked"]["lat"]
+        lng = map_data["last_object_clicked"]["lng"]
+        
+        # Encontrar el barrio más cercano al click
+        for b_name, b_info in BARRIOS_CARTAGENA.items():
+            # Si el click es muy cerca del marcador (tolerancia geo)
+            if abs(b_info["coords"][0] - lat) < 0.005 and abs(b_info["coords"][1] - lng) < 0.005:
+                if st.session_state.barrio_seleccionado != b_name:
+                    # Cambiar el territorio seleccionado y refrescar el Dashboard
+                    st.session_state.barrio_seleccionado = b_name
+                    st.rerun()
