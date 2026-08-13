@@ -60,6 +60,26 @@ st.markdown("""
         box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2);
         margin-bottom: 20px;
     }
+    
+    /* Tarjetas de resultados secundarios */
+    .result-card {
+        background: rgba(30, 41, 59, 0.4);
+        border-radius: 12px;
+        padding: 15px;
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.15);
+        margin-top: 15px;
+        margin-bottom: 15px;
+    }
+    
+    .result-card-header {
+        font-size: 1.1rem;
+        font-weight: 600;
+        color: #f1f5f9;
+        margin-bottom: 10px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+        padding-bottom: 5px;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -67,6 +87,12 @@ st.markdown("""
 st.markdown('<h1 class="dashboard-header">🌊 AlertaMarea x Canal IA</h1>', unsafe_allow_html=True)
 st.markdown("**Sistema Inteligente de Detección Temprana y Priorización - Cartagena**")
 st.write("")
+
+# Inicializar cache en st.session_state para evitar llamadas repetidas a la IA
+if "resultado_ia" not in st.session_state:
+    st.session_state.resultado_ia = None
+if "ultimo_archivo" not in st.session_state:
+    st.session_state.ultimo_archivo = None
 
 def obtener_datos_clima(lat, lon):
     """Consulta la API pública de Open-Meteo para obtener datos completos del clima actual."""
@@ -158,50 +184,35 @@ with st.sidebar:
 
     st.caption(f"☁️ Pronóstico simulado: **{estado_clima}**")
 
-# --- DISEÑO PRINCIPAL (2 Columnas) ---
-col_mapa, col_resultados = st.columns([2, 1])
-riesgo_pct = 0
-resultado_procesado = False
-
-# --- COLUMNA DERECHA: PROCESAMIENTO DE IA ---
-with col_resultados:
-    st.subheader("🤖 Análisis de IA")
-
-    if uploaded_file is not None:
+# --- LÓGICA DE PROCESAMIENTO DE IA (Con Caché en Session State) ---
+if uploaded_file is not None:
+    # Identificador único basado en nombre y tamaño del archivo
+    file_id = f"{uploaded_file.name}_{uploaded_file.size}"
+    
+    if st.session_state.ultimo_archivo != file_id:
+        st.session_state.ultimo_archivo = file_id
+        # Abrir imagen y llamar a la IA (se ejecuta solo UNA VEZ por archivo cargado)
         image = Image.open(uploaded_file)
-        st.image(image, caption=f"Reporte en {barrio_seleccionado}", width="stretch")
-
         with st.spinner("Procesando imagen con IA..."):
-            resultado = analizar_imagen_canal(image)
-
-        nivel = resultado.get("nivel_obstruccion", "Desconocido")
-        motivo = resultado.get("tipo_problema", "Desconocido")
-        riesgo_pct = resultado.get("riesgo_inundacion_porcentaje", 0)
-        justificacion = resultado.get("justificacion", "")
-        resultado_procesado = True
-
-        st.metric(label="Obstrucción Canales", value=f"{nivel}")
-        st.metric(
-            label="Índice de Obstrucción",
-            value=f"{riesgo_pct}%",
-            delta=motivo,
-            delta_color="inverse",
-        )
-        st.write(f"**Diagnóstico:** {justificacion}")
-
-        # Datos simulados de reportes históricos por mes para vista dashboard B2G
-        st.divider()
-        st.caption("📊 Histórico de Reportes (Últimos 6 meses)")
-        datos_historicos = pd.DataFrame(
-            np.random.randint(10, 50, size=(6, 2)),
-            columns=['Reportes Ciudadanos', 'Limpiezas Ejecutadas'],
-            index=['Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago']
-        )
-        st.bar_chart(datos_historicos, color=["#6366f1", "#475569"])
-    else:
-        st.info("👈 Selecciona el barrio y sube una foto para analizar el riesgo.")
+            st.session_state.resultado_ia = analizar_imagen_canal(image)
+else:
+    # Limpiar caché si no hay archivo
+    st.session_state.resultado_ia = None
+    st.session_state.ultimo_archivo = None
 
 # --- MOTOR DE DECISIÓN MULTIVARIABLE DE ALERTAMAREA ---
+riesgo_pct = 0
+nivel_obstruccion = "Ninguno"
+tipo_problema = "Ninguno"
+justificacion = ""
+
+if st.session_state.resultado_ia is not None:
+    res = st.session_state.resultado_ia
+    nivel_obstruccion = res.get("nivel_obstruccion", "Ninguno")
+    tipo_problema = res.get("tipo_problema", "Ninguno")
+    riesgo_pct = res.get("riesgo_inundacion_porcentaje", 0)
+    justificacion = res.get("justificacion", "")
+
 # Ponderación: 60% importa cómo está el canal (IA), 40% importa cuánto llueve (Slider)
 riesgo_base_ia = riesgo_pct / 100 
 factor_lluvia = intensidad_lluvia_mm / 100
@@ -226,6 +237,78 @@ else:
     color_marcador = "green"
     icono_marcador = "ok-circle"
     mensaje_alerta = f"🟢 ZONA SEGURA (Riesgo: {riesgo_total_pct}%): Flujo de agua óptimo en {barrio_seleccionado}."
+
+# --- DISEÑO DE COLUMNAS PRINCIPALES ---
+col_mapa, col_resultados = st.columns([2, 1])
+
+# --- COLUMNA DERECHA: PROCESAMIENTO DE IA + LLUVIA SIMULADA ---
+with col_resultados:
+    st.subheader("🤖 Diagnóstico Integrado")
+
+    if uploaded_file is not None:
+        image = Image.open(uploaded_file)
+        st.image(image, caption=f"Reporte en {barrio_seleccionado}", width="stretch")
+
+        # 1. RECUADRO A: Análisis estático de la IA (Solo lee la foto)
+        st.markdown('<div class="result-card">', unsafe_allow_html=True)
+        st.markdown('<div class="result-card-header">👁️ Visión por Computadora (IA)</div>', unsafe_allow_html=True)
+        st.metric(label="Obstrucción Canales (IA)", value=f"{nivel_obstruccion}")
+        st.metric(
+            label="Índice de Obstrucción Base",
+            value=f"{riesgo_pct}%",
+            delta=tipo_problema,
+            delta_color="inverse",
+        )
+        st.write(f"**Diagnóstico Base:** {justificacion}")
+        st.markdown('</div>', unsafe_allow_html=True)
+
+        # 2. RECUADRO B: Simulación y Riesgo Combinado (IA + Lluvia)
+        # Clasificar la intensidad de lluvia
+        if intensidad_lluvia_mm == 0:
+            clasif_lluvia = "☀️ Despejado"
+        elif intensidad_lluvia_mm <= 20:
+            clasif_lluvia = "🌧️ Llovizna / Lluvia Leve"
+        elif intensidad_lluvia_mm <= 50:
+            clasif_lluvia = "⛈️ Lluvia Media / Moderada"
+        elif intensidad_lluvia_mm <= 80:
+            clasif_lluvia = "⛈️ Lluvia Fuerte"
+        else:
+            clasif_lluvia = "🚨 Lluvia Torrencial / Tormenta"
+
+        st.markdown('<div class="result-card">', unsafe_allow_html=True)
+        st.markdown('<div class="result-card-header">⚡ Simulación y Riesgo Combinado</div>', unsafe_allow_html=True)
+        st.write(f"**Simulación de Clima:** {clasif_lluvia} ({intensidad_lluvia_mm} mm/h)")
+        st.write(f"**Obstrucción base (IA):** {riesgo_pct}%")
+        
+        # Métrica de riesgo combinada
+        st.metric(
+            label="Riesgo Total Agregado", 
+            value=f"{riesgo_total_pct}%", 
+            delta=f"Impacto Lluvia: +{int(factor_lluvia * 40)}%"
+        )
+        
+        # Alerta descriptiva según riesgo
+        if riesgo_total_pct >= 75:
+            st.error(f"🔴 EMERGENCIA ROJA: Envío inmediato de personal de rescate.")
+        elif riesgo_total_pct >= 50:
+            st.warning(f"🟠 ALERTA NARANJA: Programar mantenimiento preventivo.")
+        elif riesgo_total_pct >= 25:
+            st.info(f"🔵 ALERTA AZUL: Monitoreo rutinario por radar.")
+        else:
+            st.success(f"🟢 CONDICIONES SEGURAS: Canal operando con normalidad.")
+        st.markdown('</div>', unsafe_allow_html=True)
+
+        # Datos históricos
+        st.divider()
+        st.caption("📊 Histórico de Reportes (Últimos 6 meses)")
+        datos_historicos = pd.DataFrame(
+            np.random.randint(10, 50, size=(6, 2)),
+            columns=['Reportes Ciudadanos', 'Limpiezas Ejecutadas'],
+            index=['Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago']
+        )
+        st.bar_chart(datos_historicos, color=["#6366f1", "#475569"])
+    else:
+        st.info("👈 Selecciona el barrio y sube una foto para analizar el riesgo.")
 
 # --- COLUMNA IZQUIERDA: MAPA E INDICADORES ---
 with col_mapa:
