@@ -11,7 +11,7 @@ import numpy as np
 from vision_ai import analizar_imagen_canal
 
 # 1. CONFIGURACIÓN DE PÁGINA
-st.set_page_config(page_title="AlertaMarea x Canal IA", layout="wide", page_icon="🌊")
+st.set_page_config(page_title="Pluv.IA | Cartagena", layout="wide", page_icon="🌧️")
 
 # CSS personalizado (Estilo Dark GIS / MIDAS)
 st.markdown("""
@@ -125,7 +125,8 @@ BARRIOS_CARTAGENA = {
     }
 }
 
-st.markdown('<h2 class="dashboard-header">🌊 MIDAS x AlertaMarea (Visor Territorial)</h2>', unsafe_allow_html=True)
+st.title("🌧️ Pluv.IA")
+st.markdown("**Sistema Inteligente de Prevención Pluvial impulsado por Fontumi y Gemini**")
 st.write("")
 
 # --- INTERFAZ TIPO MIDAS (2 COLUMNAS) ---
