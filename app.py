@@ -107,7 +107,11 @@ BARRIOS_CARTAGENA = {
     "La Boquilla (Sector Playa)": {"coords": [10.4633, -75.4967], "historial": "Alto (Inundaciones continuas en Nov 2022 por marea y lluvias prolongadas)"},
     "La María": {"coords": [10.4285, -75.5081], "historial": "Alto (Vulnerabilidad estructural y desbordamiento fluvial)"},
     "San Fernando": {"coords": [10.3812, -75.4985], "historial": "Alto (8 eventos históricos de inundación registrados en zona suroriente)"},
-    "Centro Histórico": {"coords": [10.4236, -75.5512], "historial": "Medio (Vulnerabilidad a mareas altas y mar de leva)"}
+    "Centro Histórico": {"coords": [10.4236, -75.5512], "historial": "Medio (Vulnerabilidad a mareas altas y mar de leva)"},
+    "Cerro de La Popa / Loma del Marión": {"coords": [10.4190, -75.5250], "historial": "Crítico - Remoción en Masa (Deslizamientos históricos reportados por SIMMA y OAGRD)"},
+    "Tierra Bomba / Bocachica": {"coords": [10.3544, -75.5683], "historial": "Alto (Erosión costera severa e inundaciones por mar de leva - Talleres Participativos)"},
+    "Barú (Sector Pital)": {"coords": [10.2225, -75.5786], "historial": "Medio-Alto (Problemas con sistema de drenaje e inundaciones por lluvias intensas)"},
+    "Pasacaballos": {"coords": [10.2819, -75.5161], "historial": "Medio (Inundaciones asociadas a lluvias y al Canal del Dique)"}
 }
 
 # --- PANEL LATERAL (SIDEBAR) ---
@@ -242,7 +246,7 @@ with col_detalles:
     st.subheader("📸 Reporte / Diagnóstico")
     if uploaded_file is not None:
         image = Image.open(uploaded_file)
-        st.image(image, caption="Imagen procesada", use_column_width=True)
+        st.image(image, caption="Imagen procesada", use_container_width=True)
         st.write(f"**Análisis de la IA:** {justificacion}")
     else:
         st.info("👈 Sube una fotografía de un canal para ver el reporte detallado.")
