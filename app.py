@@ -2,6 +2,7 @@ import streamlit as st
 import folium
 from streamlit_folium import st_folium
 from PIL import Image
+import requests
 
 # Importar nuestro "cerebro" local que acabas de crear
 from vision_ai import analizar_imagen_canal
@@ -55,77 +56,112 @@ st.markdown('<h1 class="dashboard-header">🌊 AlertaMarea x Canal IA</h1>', uns
 st.markdown("**Sistema Inteligente de Detección Temprana y Priorización - Cartagena**")
 st.write("")
 
+def obtener_precipitacion_real(lat, lon):
+    """Consulta la API pública de Open-Meteo para obtener la lluvia actual en mm."""
+    try:
+        url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&current=precipitation"
+        response = requests.get(url, timeout=3).json()
+        precipitacion = response.get("current", {}).get("precipitation", 0.0)
+        return precipitacion
+    except Exception:
+        return 0.0  # Fallback seguro si no hay internet o falla la API
+
+# Diccionario con puntos críticos de Cartagena (Latitud, Longitud)
+BARRIOS_CARTAGENA = {
+    "El Pozón (Sector Isla de León)": [10.3881, -75.4722],
+    "Olaya Herrera (Sector Central)": [10.4015, -75.4923],
+    "La María": [10.4285, -75.5081],
+    "San Fernando": [10.3812, -75.4985],
+    "Centro Histórico": [10.4236, -75.5512]
+}
+
 # --- PANEL LATERAL (SIDEBAR) ---
 with st.sidebar:
     st.header("🎛️ Centro de Operaciones")
-    st.info("1. Sube una foto de un canal.\n2. La IA lo evalúa.\n3. Simula lluvia para ver la alerta combinada.")
-    
-    uploaded_file = st.file_uploader("📸 Reporte Ciudadano (Subir Foto)", type=["jpg", "jpeg", "png"])
-    
+
+    # 1. Selector de Ubicación / Barrio
+    barrio_seleccionado = st.selectbox(
+        "📍 Ubicación del Reporte (Sector)", 
+        list(BARRIOS_CARTAGENA.keys())
+    )
+    coords = BARRIOS_CARTAGENA[barrio_seleccionado]
+
+    # 2. Cargar Foto
+    uploaded_file = st.file_uploader(
+        "📸 Reporte Ciudadano (Subir Foto)", 
+        type=["jpg", "jpeg", "png"]
+    )
+
     st.divider()
-    st.subheader("⛈️ Variables Meteorológicas")
-    simular_lluvia = st.checkbox("Simular Tormenta (Radar)", value=False)
-    
-    st.divider()
-    st.caption("Prototipo B2G (Business-to-Government) - Hackathon 2026")
+    st.subheader("⛈️ Monitoreo Climatológico")
+
+    # 3. Lluvia Real vs Simulación
+    lluvia_real_mm = obtener_precipitacion_real(coords[0], coords[1])
+    st.caption(f"流️ Precipitación actual en API: **{lluvia_real_mm} mm**")
+
+    # Checkbox para forzar lluvia en la demo si no está lloviendo afuera
+    simular_lluvia = st.checkbox(
+        "⚡ Forzar Simulación de Tormenta", 
+        value=(lluvia_real_mm > 1.0)
+    )
+
+# Lluvia activa si la API dice que llueve O si activaste la simulación manual
+hay_lluvia_activa = (lluvia_real_mm > 1.0) or simular_lluvia
 
 # --- DISEÑO PRINCIPAL (2 Columnas) ---
 col_mapa, col_resultados = st.columns([2, 1])
-
-# Variables por defecto
 riesgo_alto_ia = False
-color_marcador = "green"
-mensaje_alerta = "🟢 ZONA SEGURA: Canales fluyendo. Sin reportes críticos en el perímetro."
-icono_marcador = "ok-circle"
 
 # --- COLUMNA DERECHA: PROCESAMIENTO DE IA ---
 with col_resultados:
     st.subheader("🤖 Análisis de IA")
-    
+
     if uploaded_file is not None:
-        # 1. Mostrar foto
         image = Image.open(uploaded_file)
-        st.image(image, caption="Imagen recibida", width="stretch")
-        
-        # 2. Procesar con tu modelo local (Ollama / OpenRouter en cascada)
-        with st.spinner("Procesando imagen con IA Visión..."):
+        st.image(image, caption=f"Reporte en {barrio_seleccionado}", width="stretch")
+
+        with st.spinner("Procesando imagen con IA..."):
             resultado = analizar_imagen_canal(image)
-            
-        # 3. Extraer datos del JSON
+
         nivel = resultado.get("nivel_obstruccion", "Desconocido")
         motivo = resultado.get("tipo_problema", "Desconocido")
         riesgo_pct = resultado.get("riesgo_inundacion_porcentaje", 0)
         justificacion = resultado.get("justificacion", "")
-        
-        # 4. Mostrar métricas en la interfaz
-        st.metric(label="Nivel de Obstrucción Detectado", value=f"{nivel}")
-        st.metric(label="Riesgo Estructural", value=f"{riesgo_pct}%", delta=motivo, delta_color="inverse")
-        st.write(f"**Decisión del Modelo:** {justificacion}")
-        
-        # 5. Regla de negocio
+
+        st.metric(label="Obstrucción Canales", value=f"{nivel}")
+        st.metric(
+            label="Índice de Obstrucción",
+            value=f"{riesgo_pct}%",
+            delta=motivo,
+            delta_color="inverse",
+        )
+        st.write(f"**Diagnóstico:** {justificacion}")
+
         if nivel in ["Alto", "Medio"] or riesgo_pct > 60:
             riesgo_alto_ia = True
-            
     else:
-        st.warning("👈 Sube un reporte fotográfico en el panel izquierdo para iniciar.")
+        st.info("👈 Selecciona el barrio y sube una foto para analizar el riesgo.")
 
-# --- COLUMNA IZQUIERDA: MOTOR DE DECISIÓN Y MAPA ---
-# Aquí combinamos "Canal IA" (La foto) con "AlertaMarea" (El Clima)
-if riesgo_alto_ia and simular_lluvia:
+# --- MOTOR DE DECISIÓN DE ALERTAMAREA ---
+if riesgo_alto_ia and hay_lluvia_activa:
     color_marcador = "red"
     icono_marcador = "warning-sign"
-    mensaje_alerta = "🚨 ALERTA ROJA INMINENTE: Obstrucción crítica confirmada + Precipitaciones altas. Enviar cuadrilla de emergencia prioridad 1 y desviar tráfico."
-elif riesgo_alto_ia and not simular_lluvia:
+    mensaje_alerta = f"🚨 ALERTA ROJA en {barrio_seleccionado}: Obstrucción severa + precipitaciones. Riesgo inminente de inundación."
+elif riesgo_alto_ia and not hay_lluvia_activa:
     color_marcador = "orange"
     icono_marcador = "info-sign"
-    mensaje_alerta = "⚠️ ALERTA NARANJA: Canal taponado. Alto riesgo de inundación si inician lluvias. Programar limpieza preventiva."
-elif simular_lluvia and not riesgo_alto_ia:
+    mensaje_alerta = f"⚠️ ALERTA NARANJA en {barrio_seleccionado}: Obstrucción en canal detectada. Programar limpieza antes de lluvias."
+elif hay_lluvia_activa and not riesgo_alto_ia:
     color_marcador = "blue"
     icono_marcador = "tint"
-    mensaje_alerta = "ℹ️ ALERTA AZUL: Fuertes lluvias. Canales despejados. Monitoreando capacidad de drenaje."
+    mensaje_alerta = f"ℹ️ ALERTA AZUL en {barrio_seleccionado}: Lluvia en curso, pero el canal está despejado."
+else:
+    color_marcador = "green"
+    icono_marcador = "ok-circle"
+    mensaje_alerta = f"🟢 ZONA SEGURA: Sin novedades en {barrio_seleccionado}."
 
+# --- MAPA ---
 with col_mapa:
-    # 1. Imprimir la barra de estado
     if color_marcador == "red":
         st.error(mensaje_alerta)
     elif color_marcador == "orange":
@@ -134,20 +170,19 @@ with col_mapa:
         st.info(mensaje_alerta)
     else:
         st.success(mensaje_alerta)
-        
-    st.subheader("🗺️ Radar Territorial Inteligente")
-    
-    # 2. Configurar el mapa interactivo
-    # Latitud y longitud de Cartagena (centrado en la ciudad) con tiles dark_matter
-    mapa = folium.Map(location=[10.3997, -75.4795], zoom_start=13, tiles="CartoDB dark_matter")
-    
-    # 3. Poner el pin dinámico (simulando que el reporte es en un barrio vulnerable)
+
+    # El mapa se centra exactamente en las coordenadas del barrio seleccionado
+    mapa = folium.Map(
+        location=coords, 
+        zoom_start=14, 
+        tiles="CartoDB dark_matter"
+    )
+
     folium.Marker(
-        location=[10.4050, -75.4900], # Coordenadas arbitrarias simulando un punto crítico
-        popup=f"Estado: {mensaje_alerta}",
-        tooltip="📍 Reporte: Canal Sector 4",
-        icon=folium.Icon(color=color_marcador, icon=icono_marcador)
+        location=coords,
+        popup=mensaje_alerta,
+        tooltip=f"📍 Sector: {barrio_seleccionado}",
+        icon=folium.Icon(color=color_marcador, icon=icono_marcador),
     ).add_to(mapa)
-    
-    # 4. Renderizar el mapa en la app
+
     st_folium(mapa, width=720, height=500)
